@@ -93,7 +93,7 @@ def create_output_images(Rover):
       # If there are, we'll step through the known sample positions
       # to confirm whether detections are real
       if rock_world_pos[0].any():
-            print('************ found a rock')
+            print('************ found a rock in the horizon')
             rock_size = 2
             for idx in range(len(Rover.samples_pos[0])):
                   test_rock_x = Rover.samples_pos[0][idx]

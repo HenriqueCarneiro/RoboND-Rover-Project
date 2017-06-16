@@ -14,18 +14,9 @@ def decision_step(Rover):
     if Rover.nav_angles is not None:
         # Check for Rover.mode status
         if Rover.mode == 'forward':
+            #print('-if 1 FORWARD')
             # Check the extent of navigable terrain
-            if Rover.near_sample:
-                # When close enough to a sample, Rover should pick that golden rock up.
-                # Set mode to "stop" and hit the brakes!
-                Rover.throttle = 0
-                # Set brake to stored brake value
-                Rover.brake = Rover.brake_set
-                Rover.steer = 0
-                Rover.mode = 'stop'
-                Rover.picking_up = 0
-
-            elif len(Rover.nav_angles) >= Rover.stop_forward:
+            if len(Rover.nav_angles) >= Rover.stop_forward:
                 # If mode is forward, navigable terrain looks good
                 # and velocity is below max, then throttle
                 if Rover.vel < Rover.max_vel:
@@ -33,12 +24,18 @@ def decision_step(Rover):
                     if (Rover.throttle == 0):
                         Rover.throttle = Rover.throttle_set
                     else:
-                        Rover.throttle *= 1.1 
+                        Rover.throttle *= 1.01
                 else: # Else coast
                     Rover.throttle = 0
                 Rover.brake = 0
                 # Set steering to average angle clipped to the range +/- 15
                 Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi), -15, 15)
+                if len(Rover.nav_angles) >= Rover.random_pos_angles:
+                    if np.random.random() <= 0.3:
+                        if Rover.steer >= 0:
+                            Rover.steer = np.clip(np.random.normal(Rover.steer - 2, 2), -15, 15)
+                        else:
+                            Rover.steer = np.clip(np.random.normal(Rover.steer + 2, 2), -15, 15)
             # If there's a lack of navigable terrain pixels then go to 'stop' mode
             elif len(Rover.nav_angles) < Rover.stop_forward:
                     # Set mode to "stop" and hit the brakes!
@@ -48,8 +45,35 @@ def decision_step(Rover):
                     Rover.steer = 0
                     Rover.mode = 'stop'
 
+        # ATTENTION: sometimes the rover can get stuck in place. We need to decide what to do to help it move again
+            if Rover.vel <= 0.3 and Rover.vel >= -0.3 and not Rover.is_stuck:
+                if Rover.stuck_time_initial is None:
+                    Rover.stuck_time_initial = Rover.total_time
+                if ((Rover.total_time - Rover.stuck_time_initial) >= Rover.stuck_time_max_waiting):
+                    Rover.is_stuck = True
+            elif Rover.is_stuck:
+                if Rover.vel >= 0.6 or Rover.vel <= -0.6:
+                    # rover is stuck, but moving slowly. It seems that it can free itself, so it will no longer be "stuck"
+                    Rover.is_stuck = False
+                    Rover.stuck_time_initial = None
+                    Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi), -15, 15)
+                else:
+                    # rover is stuck and not moving. We will try to make it go backwards
+                    Rover.throttle = -Rover.throttle_set
+                    Rover.brake = 0
+                    Rover.steer = 0
+                    if ((Rover.total_time - Rover.stuck_time_initial) // Rover.stuck_time_max_waiting) % 5 == 0:
+                        Rover.throttle = 0
+                        Rover.steer = np.clip(-(Rover.steer + 10), -15, 15)
+                    if ((Rover.total_time - Rover.stuck_time_initial) // Rover.stuck_time_max_waiting) % 10 == 0:
+                        Rover.throttle = Rover.throttle_set
+            else:
+                Rover.is_stuck = False
+                Rover.stuck_time_initial = None
+
         # If we're already in "stop" mode then make different decisions
         elif Rover.mode == 'stop':
+            #print('-elif 1 STOP')
             # If we're in stop mode but still moving keep braking
             if Rover.vel > 0.2:
                 Rover.throttle = 0
@@ -73,18 +97,38 @@ def decision_step(Rover):
                     # Set steer to mean angle
                     Rover.steer = np.clip(np.mean(Rover.nav_angles * 180/np.pi), -15, 15)
                     Rover.mode = 'forward'
-    # Just to make the rover do something
-    # even if no modifications have been made to the code
-    else:
-        Rover.throttle = Rover.throttle_set
-        Rover.steer = 0
-        Rover.brake = 0
+        # Just to make the rover do something
+        # even if no modifications have been made to the code
+        else:
+            Rover.steer = 0
+            Rover.brake = 0
 
-    # If in a state where want to pickup a rock send pickup command
-    if Rover.near_sample and Rover.vel == 0 and not Rover.picking_up:
-        Rover.send_pickup = True
-        Rover.samples_found += 1
-        print ('--------------Rover.samples_found' + str(Rover.samples_found))
+        # If in a state where want to pickup a rock send pickup command
+        # if rover is near to rock: pick the damn rock !!
+        if Rover.near_sample:
+            if Rover.vel == 0:
+                #rover is not moving: pick rock
+                if not Rover.picking_up:
+                    Rover.send_pickup = True
+            else:
+                #rover is moving: stop and pick rock
+                Rover.throttle = 0
+                Rover.brake = Rover.brake_set
+                Rover.steer = 0
+                Rover.mode = 'stop'
+        # else: rover is not close to rock but there is some rock in on the horizon: We try to guide rover to go towards rock
+        elif Rover.rock_angles is not None and len(Rover.rock_angles) >= Rover.rock_angles_detected:
+            Rover.steer = np.clip(np.median(Rover.rock_angles * 180/np.pi), -15, 15)
+            if Rover.vel >= 1:
+                # stop
+                Rover.throttle = 0
+                Rover.brake = Rover.brake_set
+                Rover.mode = 'stop'
+            else:
+                # moving toward the rock
+                Rover.throttle = Rover.throttle_set
+                Rover.brake = 0
+                Rover.mode = 'forward'
 
 
     return Rover

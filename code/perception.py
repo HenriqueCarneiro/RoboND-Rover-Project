@@ -33,8 +33,7 @@ def color_thresh_obstacle(img, rgb_thresh=(160, 160, 160)):
     # Return the binary image
     return color_select1
 
-def color_thresh_rock(img, rgb_low=(100, 120, 0), rgb_high=(210, 180, 90)):
-#def color_thresh_rock(img, rgb_low=(140, 120, 0), rgb_high=(210, 180, 90)):
+def color_thresh_rock(img, rgb_low=(100, 100, 0), rgb_high=(230, 230, 80)):
     # Create an array of zeros same xy size as img, but single channel
     color_select2 = np.zeros_like(img[:,:,0])
     # Require that each pixel be between threshold values in RGB
@@ -160,6 +159,8 @@ def perception_step(Rover):
     # 6) Convert rover-centric pixel values to world coordinates
     (rover_xpos, rover_ypos) = Rover.pos
     rover_yaw = Rover.yaw
+    rover_roll = Rover.roll
+    rover_pitch = Rover.pitch
     worldsize = Rover.worldmap.shape[0]
     worldmap = np.zeros((200, 200))
     scale = dst_size * 2
@@ -177,14 +178,11 @@ def perception_step(Rover):
 
     #print ('x_world_rockimage=' + str(x_world_rockimage) + ' y_world_rockimage=' + str(y_world_rockimage) )
     # 7) Update Rover worldmap (to be displayed on right side of screen)
-        # Example: Rover.worldmap[obstacle_y_world, obstacle_x_world, 0] += 1
-        #          Rover.worldmap[rock_y_world, rock_x_world, 1] += 1
-        #          Rover.worldmap[navigable_y_world, navigable_x_world, 2] += 1
-    Rover.worldmap[y_world_obstacle, x_world_obstacle, 0] += 255
-    Rover.worldmap[y_world_rockimage, x_world_rockimage, 1] += 255
-    Rover.worldmap[y_world_terrain, x_world_terrain, 2] += 255
-
-
+    if ((rover_roll <= 0.5) or (rover_roll >= 300)):
+        if rover_pitch <= 0.5 or rover_pitch >= 300:
+            Rover.worldmap[y_world_obstacle, x_world_obstacle, 0] += 255
+            Rover.worldmap[y_world_rockimage, x_world_rockimage, 1] += 255
+            Rover.worldmap[y_world_terrain, x_world_terrain, 2] += 255
 
     # 8) Convert rover-centric pixel positions to polar coordinates
     # Update Rover pixel distances and angles
@@ -192,18 +190,10 @@ def perception_step(Rover):
         # Rover.nav_angles = rover_centric_angles
 
     #If there is a golden rock, try to guide the rover towards it, else, keep going throughout terrain.
-    if ((len(x_world_rockimage) > 0) and (len(y_world_rockimage) > 0)):
-        dist, angles = to_polar_coords(xpix_rockimage, xpix_rockimage)
-        print('Going towards golden rock')
-    else:
-        dist, angles = to_polar_coords(xpix_terrain, ypix_terrain)
-        print('NO GOLDEN ROCK. Going throughout terrain')
-
-#    dist, angles = to_polar_coords(xpix_terrain, ypix_terrain)
-
-    Rover.nav_dists = dist
-    Rover.nav_angles = angles
-
+    #Obtaining distance and angle towards rock
+    #Obtaining distance and angle of terrain
+    Rover.rock_dists , Rover.rock_angles = to_polar_coords(xpix_rockimage, ypix_rockimage)
+    Rover.nav_dists, Rover.nav_angles = to_polar_coords(xpix_terrain, ypix_terrain)
 
 
     return Rover
